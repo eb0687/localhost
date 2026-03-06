@@ -87,20 +87,15 @@ impl Router {
             match create_listen_socket(port) {
                 Ok(listen_fd) => {
                     info!("listening on 0.0.0.0:{port}");
-                    if let Err(err) = epoll_add(epfd, listen_fd, EPOLLIN as u32)
-                    {
-                        eprintln!(
-                            "could not register listener on port {port} in epoll: {err}"
-                        );
+                    if let Err(err) = epoll_add(epfd, listen_fd, EPOLLIN as u32) {
+                        eprintln!("could not register listener on port {port} in epoll: {err}");
                         close_fd(listen_fd);
                         continue;
                     }
                     listen_fd_to_port.insert(listen_fd, port);
                 }
                 Err(err) => {
-                    println!(
-                        "could not create a listener on port: {port}, error: {err}"
-                    );
+                    println!("could not create a listener on port: {port}, error: {err}");
                 }
             };
         }
@@ -118,13 +113,8 @@ impl Router {
         }
     }
 
-    pub fn add_route<H>(
-        &mut self,
-        port: u16,
-        pattern: &str,
-        methods: Vec<HttpMethod>,
-        handler: H,
-    ) where
+    pub fn add_route<H>(&mut self, port: u16, pattern: &str, methods: Vec<HttpMethod>, handler: H)
+    where
         H: Fn(&Request, &Data) -> Response + Send + Sync + 'static,
     {
         self.routes.entry(port).or_default().push(Route {
@@ -144,8 +134,7 @@ impl Router {
             let mut found: Option<(Handler, HashMap<String, String>)> = None;
 
             for route in routes {
-                let Some(path_value) =
-                    route_matching::match_pattern(&route.pattern, &req.path)
+                let Some(path_value) = route_matching::match_pattern(&route.pattern, &req.path)
                 else {
                     continue;
                 };
@@ -165,17 +154,13 @@ impl Router {
         let (found, matched_path_but_wrong_method) = match_result;
         let Some((handler, path_value)) = found else {
             if matched_path_but_wrong_method {
-                return error_response(
-                    &req.version,
-                    StatusCode::MethodNotAllowed,
-                );
+                return error_response(&req.version, StatusCode::MethodNotAllowed);
             }
             return error_response(&req.version, StatusCode::NotFound);
         };
 
         let now = Instant::now();
-        let (session_id, is_new_session) =
-            session::resolve_session(&mut self.sessions, req, now);
+        let (session_id, is_new_session) = session::resolve_session(&mut self.sessions, req, now);
 
         let data = Data {
             path_value,

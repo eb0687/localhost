@@ -29,13 +29,8 @@ pub fn accept_nonblocking(listen_fd: RawFd) -> io::Result<Option<RawFd>> {
     }
 }
 
-pub fn recv_nonblocking(
-    fd: RawFd,
-    buf: &mut [u8],
-) -> io::Result<Option<usize>> {
-    let n = unsafe {
-        libc::recv(fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len(), 0)
-    };
+pub fn recv_nonblocking(fd: RawFd, buf: &mut [u8]) -> io::Result<Option<usize>> {
+    let n = unsafe { libc::recv(fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len(), 0) };
     if n < 0 {
         let e = io::Error::last_os_error();
         if is_would_block(&e) { Ok(None) } else { Err(e) }
@@ -67,9 +62,7 @@ pub fn epoll_add(epfd: RawFd, fd: RawFd, events: u32) -> io::Result<()> {
     ev.events = events;
     ev.u64 = fd as u64;
 
-    let rc = unsafe {
-        libc::epoll_ctl(epfd, libc::EPOLL_CTL_ADD, fd, &mut ev as *mut _)
-    };
+    let rc = unsafe { libc::epoll_ctl(epfd, libc::EPOLL_CTL_ADD, fd, &mut ev as *mut _) };
     if rc < 0 {
         return Err(last_err("epoll_ctl(ADD)"));
     }
@@ -81,9 +74,7 @@ pub fn epoll_mod(epfd: RawFd, fd: RawFd, events: u32) -> io::Result<()> {
     ev.events = events;
     ev.u64 = fd as u64;
 
-    let rc = unsafe {
-        libc::epoll_ctl(epfd, libc::EPOLL_CTL_MOD, fd, &mut ev as *mut _)
-    };
+    let rc = unsafe { libc::epoll_ctl(epfd, libc::EPOLL_CTL_MOD, fd, &mut ev as *mut _) };
     if rc < 0 {
         return Err(last_err("epoll_ctl(MOD)"));
     }
@@ -113,11 +104,7 @@ pub fn last_err(ctx: &str) -> io::Error {
 pub fn create_listen_socket(port: u16) -> io::Result<RawFd> {
     let fd = unsafe {
         // libc::SOCK_NONBLOCK here means the listening libc::socket is nonblocking.
-        let fd = libc::socket(
-            libc::AF_INET,
-            libc::SOCK_STREAM | libc::SOCK_NONBLOCK,
-            0,
-        );
+        let fd = libc::socket(libc::AF_INET, libc::SOCK_STREAM | libc::SOCK_NONBLOCK, 0);
         if fd < 0 {
             return Err(last_err("libc::socket"));
         }
@@ -184,10 +171,7 @@ pub fn create_epoll() -> io::Result<RawFd> {
     Ok(epfd)
 }
 
-pub fn epoll_wait_blocking(
-    epfd: RawFd,
-    events: &mut [epoll_event],
-) -> io::Result<usize> {
+pub fn epoll_wait_blocking(epfd: RawFd, events: &mut [epoll_event]) -> io::Result<usize> {
     loop {
         let n = unsafe {
             libc::epoll_wait(

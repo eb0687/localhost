@@ -1,6 +1,4 @@
-use crate::config::model::{
-    Config, FileServerConfig, RedirectConfig, RouteRule,
-};
+use crate::config::model::{Config, FileServerConfig, RedirectConfig, RouteRule};
 use crate::config::parse::parse_route_key;
 
 impl Config {
@@ -53,11 +51,7 @@ impl Config {
     }
 }
 
-fn validate_file_server(
-    route_key: &str,
-    cfg: &FileServerConfig,
-    errors: &mut Vec<String>,
-) {
+fn validate_file_server(route_key: &str, cfg: &FileServerConfig, errors: &mut Vec<String>) {
     if cfg.root.trim().is_empty() {
         errors.push(format!(
             "route '{route_key}' (file_server): 'root' must be non-empty"
@@ -87,11 +81,7 @@ fn validate_file_server(
     }
 }
 
-fn validate_redirect(
-    route_key: &str,
-    cfg: &RedirectConfig,
-    errors: &mut Vec<String>,
-) {
+fn validate_redirect(route_key: &str, cfg: &RedirectConfig, errors: &mut Vec<String>) {
     let target = cfg.target.trim();
     if target.is_empty() {
         errors.push(format!(

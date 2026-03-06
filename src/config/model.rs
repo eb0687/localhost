@@ -49,6 +49,8 @@ pub struct FileServerConfig {
     pub error_pages: Option<HashMap<String, String>>,
     pub directory_listing: Option<bool>,
     pub allowed_verbs: Option<Vec<HttpMethod>>,
+    #[serde(skip)]
+    pub mount_path: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
