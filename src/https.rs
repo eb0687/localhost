@@ -30,6 +30,7 @@ pub enum StatusCode {
     NoContent,
     BadRequest,
     Forbidden,
+    Found,
     NotFound,
     MethodNotAllowed,
     // PayloadTooLarge,
@@ -45,9 +46,9 @@ impl StatusCode {
             StatusCode::Created => 201,
             StatusCode::NoContent => 204,
             StatusCode::Forbidden => 403,
+            StatusCode::Found => 302,
             StatusCode::NotFound => 404,
             StatusCode::MethodNotAllowed => 405,
-            // StatusCode::PayloadTooLarge => 413,
             StatusCode::InternalServerError => 500,
             StatusCode::VersionNotSupported => 505,
         }
@@ -61,8 +62,8 @@ impl StatusCode {
             StatusCode::Created => "Created",
             StatusCode::NoContent => "No Content",
             StatusCode::NotFound => "Not Found",
+            StatusCode::Found => "Found",
             StatusCode::MethodNotAllowed => "Method Not Allowed",
-            // StatusCode::PayloadTooLarge => "Payload Too Large",
             StatusCode::InternalServerError => "Internal Server Error",
             StatusCode::VersionNotSupported => "HTTP Version Not Supported",
         }

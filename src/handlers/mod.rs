@@ -218,7 +218,7 @@ pub fn redirect_factory(
     move |req: &https::Request, _data: &router::Data| -> Response {
         let mut resp = response_with_body(
             &req.version,
-            StatusCode::NoContent,
+            StatusCode::Found,
             "text/plain; charset=utf-8",
             format!("Redirecting to {}", redirect_config.target).into_bytes(),
         );
