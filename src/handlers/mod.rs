@@ -11,6 +11,7 @@ use crate::{
     },
     https::{self, Response, StatusCode, response_with_body},
     router::{self, Router},
+    utils::helpers::content_type_for_path,
 };
 
 pub fn error_response(version: &str, status: StatusCode) -> Response {
@@ -186,11 +187,14 @@ pub fn file_server_factory(
             return error_response(&req.version, StatusCode::MethodNotAllowed);
         }
 
+        let path = Path::new(&cfg.root);
+        let content_type = content_type_for_path(path);
+
         match fs::read(cfg.root.as_str()) {
             Ok(bytes) => response_with_body(
                 &req.version,
                 StatusCode::Ok,
-                "application/octet-stream",
+                content_type,
                 bytes,
             ),
             Err(_) => error_response(&req.version, StatusCode::NotFound),
