@@ -1,0 +1,23 @@
+{
+  "schema": "./schema.json",
+  ":8080/readme": {
+    "type": "file_server",
+    "root": "./README.md",
+    "size_limit": 1024,
+    "error_pages": {
+      "404": "404.html",
+      "500": "500.html"
+    },
+    "directory_listing": false
+  },
+  ":8080/directory": {
+    "type": "file_server",
+    "root": "./",
+    "size_limit": 1024,
+    "error_pages": {
+      "404": "404.html",
+      "500": "500.html"
+    },
+    "directory_listing": true
+  }
+}

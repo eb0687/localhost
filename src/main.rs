@@ -25,10 +25,11 @@ fn main() {
     let mut router = Router::new_on_ports(&app_config.listener_ports);
     // TODO: loop over the config and deal with the routes
     // if type is cgi run CGI factory (it can be empty naser will deal with it)
-    // if type is dir run the dir serve factory
-    // if type is file run the file serve factory
     // if type is redirect run the redirect factory
-    register_routes(&mut router);
+    if let Err(err) = register_routes(&app_config, &mut router) {
+        eprintln!("Error registering routes: {err}");
+        std::process::exit(1);
+    }
 
     info!("Starting server...");
     info!("Server started on ports", "ports" => format!("{:?}", app_config.listener_ports));

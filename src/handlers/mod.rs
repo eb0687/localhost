@@ -1,11 +1,17 @@
-use std::fs;
-use std::io::ErrorKind;
-use std::path::{Path, PathBuf};
-
-use crate::https::{
-    HttpMethod, Request, Response, StatusCode, response_with_body,
+use std::{
+    fs,
+    path::{self, Path},
 };
-use crate::router::{Data, Router};
+
+use crate::{
+    config::{
+        AppConfig,
+        model::{CgiConfig, FileServerConfig, RedirectConfig, RouteRule},
+        parse::parse_route_key,
+    },
+    https::{self, Response, StatusCode, response_with_body},
+    router::{self, Router},
+};
 
 pub fn error_response(version: &str, status: StatusCode) -> Response {
     let reason = status.reason();
@@ -18,261 +24,205 @@ pub fn error_response(version: &str, status: StatusCode) -> Response {
     response_with_body(version, status, "text/html; charset=utf-8", body)
 }
 
-pub fn register_routes(router: &mut Router) {
-    router.add_route(
-        8080,
-        "/files/:name",
-        vec![HttpMethod::Get, HttpMethod::Post, HttpMethod::Delete],
-        handle_file_by_name,
-    );
+pub fn register_routes(
+    app_config: &AppConfig,
+    router: &mut Router,
+) -> Result<(), String> {
+    for (path, route) in app_config.config.routes.iter() {
+        let route_key = parse_route_key(path)
+            .map_err(|e| format!("invalid route key '{}': {}", path, e))?;
 
-    router.add_route(8080, "/", vec![HttpMethod::Get], handle_public_root);
-    router.add_route(
-        8080,
-        "/health",
-        vec![HttpMethod::Get],
-        handle_public_health,
-    );
-    router.add_route(8080, "/upload", vec![HttpMethod::Post], handle_upload);
+        let port = route_key.port;
+        let pattern = route_key.path;
 
-    router.add_route(
-        8080,
-        "/upload_thing",
-        vec![HttpMethod::Get],
-        file_server_factory(true, "data".to_string()),
-    );
+        match route {
+            RouteRule::FileServer(file_server_config) => {
+                let methods = file_server_config
+                    .allowed_verbs
+                    .clone()
+                    .unwrap_or_else(|| vec![https::HttpMethod::Get]);
 
-    router.add_route(9090, "/", vec![HttpMethod::Get], handle_admin_root);
-    router.add_route(
-        9090,
-        "/health",
-        vec![HttpMethod::Get],
-        handle_admin_health,
-    );
-}
+                if methods.is_empty() {
+                    return Err(format!(
+                        "route '{}' has empty allowed_verbs",
+                        pattern
+                    ));
+                }
 
-fn handle_public_root(req: &Request, data: &Data) -> Response {
-    let host = req.headers.get("host").unwrap_or("unknown-host");
-    let sid = data.session_id.as_deref().unwrap_or("none");
-    let session_kind = if data.is_new_session {
-        "new"
-    } else {
-        "existing"
-    };
-    let body = format!(
-        "<html><body><h1>Public</h1><p>Host: {host}</p><p>Port: 8080</p><p>Session: {sid} ({session_kind})</p></body></html>"
-    );
+                let root_path = path::Path::new(&file_server_config.root);
+                if root_path.is_dir() {
+                    router.add_route(
+                        port,
+                        &pattern,
+                        methods,
+                        dir_server_factory(file_server_config.clone()),
+                    );
+                } else if root_path.is_file() {
+                    router.add_route(
+                        port,
+                        &pattern,
+                        methods,
+                        file_server_factory(file_server_config.clone()),
+                    );
+                } else {
+                    return Err(format!(
+                        "route '{}' file_server root '{}' does not exist",
+                        pattern, file_server_config.root
+                    ));
+                }
+            }
 
-    response_with_body(
-        &req.version,
-        StatusCode::Ok,
-        "text/html; charset=utf-8",
-        body.into_bytes(),
-    )
-}
-
-fn handle_public_health(req: &Request, _data: &Data) -> Response {
-    let _ = req.data.body.len();
-
-    response_with_body(
-        &req.version,
-        StatusCode::Ok,
-        "text/plain; charset=utf-8",
-        b"PUBLIC_OK".to_vec(),
-    )
-}
-
-fn handle_admin_root(req: &Request, _data: &Data) -> Response {
-    let body = "<html><body><h1>Admin</h1><p>Port: 9090</p></body></html>";
-
-    response_with_body(
-        &req.version,
-        StatusCode::Ok,
-        "text/html; charset=utf-8",
-        body.as_bytes().to_vec(),
-    )
-}
-
-fn handle_admin_health(req: &Request, _data: &Data) -> Response {
-    let _ = req.data.body.len();
-
-    response_with_body(
-        &req.version,
-        StatusCode::Ok,
-        "text/plain; charset=utf-8",
-        b"ADMIN_OK".to_vec(),
-    )
-}
-
-fn handle_upload(req: &Request, _data: &Data) -> Response {
-    println!(
-        "received upload: {} bytes\n{}",
-        req.data.body.len(),
-        String::from_utf8_lossy(&req.data.body)
-    );
-
-    if let Err(e) = fs::write("uploaded", &req.data.body) {
-        eprintln!("failed to save uploaded body: {e}");
-        return response_with_body(
-            &req.version,
-            StatusCode::InternalServerError,
-            "text/plain; charset=utf-8",
-            b"failed to save upload".to_vec(),
-        );
+            RouteRule::Cgi(cgi_config) => {
+                router.add_route(
+                    port,
+                    &pattern,
+                    vec![https::HttpMethod::Get, https::HttpMethod::Post],
+                    cgi_factory(cgi_config.clone()),
+                );
+            }
+            RouteRule::Redirect(redirect_config) => {
+                router.add_route(
+                    port,
+                    &pattern,
+                    vec![https::HttpMethod::Get],
+                    redirect_factory(redirect_config.clone()),
+                );
+            }
+        }
     }
 
-    response_with_body(
-        &req.version,
-        StatusCode::Ok,
-        "text/plain; charset=utf-8",
-        b"ok".to_vec(),
-    )
+    Ok(())
 }
 
-fn file_server_factory(
-    with_listing: bool,
-    dir_or_file: String,
-) -> impl Fn(&Request, &Data) -> Response + Send + Sync {
-    move |req: &Request, _data: &Data| -> Response {
-        println!("  handling get uploaded");
-        let body = match fs::read(&dir_or_file) {
-            Ok(bytes) => bytes,
-            Err(_) => b"no uploaded file".to_vec(),
-        };
-        if with_listing {
-            println!("  file content:\n{}", String::from_utf8_lossy(&body));
+pub fn dir_server_factory(
+    cfg: FileServerConfig,
+) -> impl Fn(&https::Request, &router::Data) -> Response + Send + Sync {
+    move |req: &https::Request, _data: &router::Data| -> Response {
+        if req.method != https::HttpMethod::Get {
+            return error_response(&req.version, StatusCode::MethodNotAllowed);
         }
+
+        let root = Path::new(&cfg.root);
+
+        let meta = match fs::metadata(root) {
+            Ok(m) => m,
+            Err(_) => {
+                return error_response(&req.version, StatusCode::NotFound);
+            }
+        };
+
+        if !meta.is_dir() {
+            return error_response(&req.version, StatusCode::NotFound);
+        };
+
+        let index_path = root.join("index.html");
+        if index_path.is_file() {
+            return match fs::read(&index_path) {
+                Ok(bytes) => response_with_body(
+                    &req.version,
+                    StatusCode::Ok,
+                    "text/html; charset=utf-8",
+                    bytes,
+                ),
+                Err(_) => error_response(
+                    &req.version,
+                    StatusCode::InternalServerError,
+                ),
+            };
+        }
+
+        let listing_enabled = cfg.directory_listing.unwrap_or(false);
+        if !listing_enabled {
+            return error_response(&req.version, StatusCode::Forbidden);
+        };
+
+        let mut items: Vec<String> = Vec::new();
+        let entries = match fs::read_dir(root) {
+            Ok(rd) => rd,
+            Err(_) => {
+                return error_response(
+                    &req.version,
+                    StatusCode::InternalServerError,
+                );
+            }
+        };
+
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            let is_dir = entry.path().is_dir();
+            if is_dir {
+                items.push(format!("{}/", name));
+            } else {
+                items.push(name);
+            }
+        }
+
+        items.sort();
+
+        let mut body =
+            String::from("<html><body><h1>Directory listing</h1><ul>");
+        for item in items {
+            body.push_str("<li>");
+            body.push_str(&item);
+            body.push_str("</li>");
+        }
+
+        body.push_str("</ul></body></html>");
 
         response_with_body(
             &req.version,
             StatusCode::Ok,
-            "text/plain; charset=utf-8",
-            body,
+            "text/html; charset=utf-8",
+            body.into_bytes(),
         )
     }
 }
 
-fn handle_file_by_name(req: &Request, data: &Data) -> Response {
-    let Some(name) = data.path_value.get("name") else {
-        return response_with_body(
-            &req.version,
-            StatusCode::BadRequest,
-            "text/plain; charset=utf-8",
-            b"missing file name".to_vec(),
-        );
-    };
-
-    let path = match file_path_from_name(name) {
-        Ok(path) => path,
-        Err(msg) => {
-            return response_with_body(
-                &req.version,
-                StatusCode::BadRequest,
-                "text/plain; charset=utf-8",
-                msg.into_bytes(),
-            );
+pub fn file_server_factory(
+    cfg: FileServerConfig,
+) -> impl Fn(&https::Request, &router::Data) -> Response + Send + Sync {
+    move |req: &https::Request, _data: &router::Data| -> Response {
+        if req.method != https::HttpMethod::Get {
+            return error_response(&req.version, StatusCode::MethodNotAllowed);
         }
-    };
 
-    match req.method {
-        HttpMethod::Get => handle_file_get(req, &path),
-        HttpMethod::Post => handle_file_post(req, &path),
-        HttpMethod::Delete => handle_file_delete(req, &path),
-        _ => error_response(&req.version, StatusCode::MethodNotAllowed),
-    }
-}
-
-fn handle_file_get(req: &Request, path: &Path) -> Response {
-    match fs::read(path) {
-        Ok(bytes) => response_with_body(
-            &req.version,
-            StatusCode::Ok,
-            "application/octet-stream",
-            bytes,
-        ),
-        Err(e) if e.kind() == ErrorKind::NotFound => response_with_body(
-            &req.version,
-            StatusCode::NotFound,
-            "text/plain; charset=utf-8",
-            b"file not found".to_vec(),
-        ),
-        Err(_) => response_with_body(
-            &req.version,
-            StatusCode::InternalServerError,
-            "text/plain; charset=utf-8",
-            b"failed to read file".to_vec(),
-        ),
-    }
-}
-
-fn handle_file_post(req: &Request, path: &Path) -> Response {
-    if let Err(e) = fs::create_dir_all("data") {
-        eprintln!("failed to create data dir: {e}");
-        return response_with_body(
-            &req.version,
-            StatusCode::InternalServerError,
-            "text/plain; charset=utf-8",
-            b"failed to prepare storage".to_vec(),
-        );
-    }
-
-    let existed = path.exists();
-    match fs::write(path, &req.data.body) {
-        Ok(()) => {
-            let status = if existed {
-                StatusCode::Ok
-            } else {
-                StatusCode::Created
-            };
-            response_with_body(
+        match fs::read(cfg.root.as_str()) {
+            Ok(bytes) => response_with_body(
                 &req.version,
-                status,
-                "text/plain; charset=utf-8",
-                b"file saved".to_vec(),
-            )
+                StatusCode::Ok,
+                "application/octet-stream",
+                bytes,
+            ),
+            Err(_) => error_response(&req.version, StatusCode::NotFound),
         }
-        Err(_) => response_with_body(
-            &req.version,
-            StatusCode::InternalServerError,
-            "text/plain; charset=utf-8",
-            b"failed to save file".to_vec(),
-        ),
     }
 }
 
-fn handle_file_delete(req: &Request, path: &Path) -> Response {
-    match fs::remove_file(path) {
-        Ok(()) => response_with_body(
+pub fn cgi_factory(
+    cgi_config: CgiConfig,
+) -> impl Fn(&https::Request, &router::Data) -> Response + Send + Sync {
+    move |req: &https::Request, _data: &router::Data| -> Response {
+        response_with_body(
+            &req.version,
+            StatusCode::InternalServerError,
+            "text/plain; charset=utf-8",
+            format!("cgi not implemented yet: {}", cgi_config.root)
+                .into_bytes(),
+        )
+    }
+}
+
+pub fn redirect_factory(
+    redirect_config: RedirectConfig,
+) -> impl Fn(&https::Request, &router::Data) -> Response + Send + Sync {
+    move |req: &https::Request, _data: &router::Data| -> Response {
+        let mut resp = response_with_body(
             &req.version,
             StatusCode::NoContent,
             "text/plain; charset=utf-8",
-            Vec::new(),
-        ),
-        Err(e) if e.kind() == ErrorKind::NotFound => response_with_body(
-            &req.version,
-            StatusCode::NotFound,
-            "text/plain; charset=utf-8",
-            b"file not found".to_vec(),
-        ),
-        Err(_) => response_with_body(
-            &req.version,
-            StatusCode::InternalServerError,
-            "text/plain; charset=utf-8",
-            b"failed to delete file".to_vec(),
-        ),
+            format!("Redirecting to {}", redirect_config.target).into_bytes(),
+        );
+        resp.headers.insert("Location", &redirect_config.target);
+        resp
     }
-}
-
-fn file_path_from_name(name: &str) -> Result<PathBuf, String> {
-    if name.is_empty() {
-        return Err("empty file name".to_string());
-    }
-    if name == "." || name == ".." || name.contains("..") {
-        return Err("invalid file name".to_string());
-    }
-    if name.contains('/') || name.contains('\\') {
-        return Err("nested paths are not allowed".to_string());
-    }
-
-    Ok(PathBuf::from("data").join(name))
 }
