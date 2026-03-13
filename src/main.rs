@@ -19,13 +19,7 @@ fn main() {
     };
     info!("Config loaded", "path" => app_config.config_path.display());
 
-    // TODO: parse it with serde
-    // Add validation with clear startup errors (invalid syntax, invalid route options, duplicate/conflicting listen declarations).
-
     let mut router = Router::new_on_ports(&app_config.listener_ports);
-    // TODO: loop over the config and deal with the routes
-    // if type is cgi run CGI factory (it can be empty naser will deal with it)
-    // if type is redirect run the redirect factory
     if let Err(err) = register_routes(&app_config, &mut router) {
         eprintln!("Error registering routes: {err}");
         std::process::exit(1);

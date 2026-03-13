@@ -4,23 +4,28 @@ use crate::config::model::{
     Config, FileServerConfig, RedirectConfig, RouteRule,
 };
 use crate::config::parse::parse_route_key;
+use crate::utils::helpers::normalize_path;
 
 impl Config {
     pub fn validate(&self) -> Result<(), String> {
         let mut errors: Vec<String> = Vec::new();
+        let mut seen: HashMap<String, String> = HashMap::new();
 
         if self.routes.is_empty() {
             errors.push("config has no routes".to_string());
         }
 
         for (route_key, rule) in &self.routes {
+            let parsed_key = match parse_route_key(route_key) {
+                Ok(v) => v,
+                Err(e) => {
+                    errors.push(e);
+                    continue;
+                }
+            };
+
             if route_key.trim().is_empty() {
                 errors.push("route key cannot be empty".to_string());
-                continue;
-            }
-
-            if let Err(err) = parse_route_key(route_key) {
-                errors.push(err);
                 continue;
             }
 
@@ -38,6 +43,18 @@ impl Config {
                 RouteRule::Redirect(cfg) => {
                     validate_redirect(route_key, cfg, &mut errors);
                 }
+            }
+
+            let host = parsed_key.host.unwrap_or_else(|| "*".to_string());
+            let path = normalize_path(&parsed_key.path);
+            let identity = format!("{host}:{}:{path}", parsed_key.port);
+
+            if let Some(first) = seen.get(&identity) {
+                errors.push(format!(
+                    "duplicate/conflicting route identity '{identity}' in '{first}' and '{route_key}'"
+                ));
+            } else {
+                seen.insert(identity, route_key.clone());
             }
         }
 
