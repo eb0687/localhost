@@ -97,10 +97,18 @@ pub fn dir_server_factory(
 
         let mut body =
             String::from("<html><body><h1>Directory listing</h1><ul>");
+        let base = if req.path.ends_with('/') {
+            req.path.clone()
+        } else {
+            format!("{}/", req.path)
+        };
         for item in items {
-            body.push_str("<li>");
+            body.push_str("<li><a href=\"");
+            body.push_str(&base);
             body.push_str(&item);
-            body.push_str("</li>");
+            body.push_str("\">");
+            body.push_str(&item);
+            body.push_str("</a></li>");
         }
         body.push_str("</ul></body></html>");
 
