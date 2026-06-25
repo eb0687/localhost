@@ -1,34 +1,52 @@
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
+use serde_json::error;
+
 use crate::config::model::FileServerConfig;
 use crate::https::{self, Response, StatusCode, response_with_body};
 use crate::router;
 use crate::utils::helpers::content_type_for_path;
 
-use super::errors::error_response;
+use super::errors::error_response_with_pages;
 
 pub fn dir_server_factory(
     cfg: FileServerConfig,
 ) -> impl Fn(&https::Request, &router::Data) -> Response + Send + Sync {
-    move |req: &https::Request, _data: &router::Data| -> Response {
+    move |req: &https::Request, data: &router::Data| -> Response {
         if req.method != https::HttpMethod::Get {
-            return error_response(&req.version, StatusCode::MethodNotAllowed);
+            return error_response_with_pages(
+                &req.version,
+                StatusCode::MethodNotAllowed,
+                &data.error_pages,
+            );
         }
 
         let root = Path::new(&cfg.root);
         let Some(rel_path) = route_relative_subpath(&cfg.mount_path, &req.path)
         else {
-            return error_response(&req.version, StatusCode::NotFound);
+            return error_response_with_pages(
+                &req.version,
+                StatusCode::NotFound,
+                &data.error_pages,
+            );
         };
         let Some(target) = safe_join_under_root(root, rel_path) else {
-            return error_response(&req.version, StatusCode::Forbidden);
+            return error_response_with_pages(
+                &req.version,
+                StatusCode::Forbidden,
+                &data.error_pages,
+            );
         };
 
         let meta = match fs::metadata(&target) {
             Ok(m) => m,
             Err(_) => {
-                return error_response(&req.version, StatusCode::NotFound);
+                return error_response_with_pages(
+                    &req.version,
+                    StatusCode::NotFound,
+                    &data.error_pages,
+                );
             }
         };
 
@@ -40,15 +58,20 @@ pub fn dir_server_factory(
                     content_type_for_path(&target),
                     bytes,
                 ),
-                Err(_) => error_response(
+                Err(_) => error_response_with_pages(
                     &req.version,
                     StatusCode::InternalServerError,
+                    &data.error_pages,
                 ),
             };
         }
 
         if !meta.is_dir() {
-            return error_response(&req.version, StatusCode::NotFound);
+            return error_response_with_pages(
+                &req.version,
+                StatusCode::NotFound,
+                &data.error_pages,
+            );
         }
 
         let index_path = target.join("index.html");
@@ -60,23 +83,29 @@ pub fn dir_server_factory(
                     content_type_for_path(&index_path),
                     bytes,
                 ),
-                Err(_) => error_response(
+                Err(_) => error_response_with_pages(
                     &req.version,
                     StatusCode::InternalServerError,
+                    &data.error_pages,
                 ),
             };
         }
 
         if !cfg.directory_listing.unwrap_or(false) {
-            return error_response(&req.version, StatusCode::Forbidden);
+            return error_response_with_pages(
+                &req.version,
+                StatusCode::Forbidden,
+                &data.error_pages,
+            );
         }
 
         let entries = match fs::read_dir(&target) {
             Ok(rd) => rd,
             Err(_) => {
-                return error_response(
+                return error_response_with_pages(
                     &req.version,
                     StatusCode::InternalServerError,
+                    &data.error_pages,
                 );
             }
         };
@@ -124,16 +153,24 @@ pub fn dir_server_factory(
 pub fn file_server_factory(
     cfg: FileServerConfig,
 ) -> impl Fn(&https::Request, &router::Data) -> Response + Send + Sync {
-    move |req: &https::Request, _data: &router::Data| -> Response {
+    move |req: &https::Request, data: &router::Data| -> Response {
         if req.method != https::HttpMethod::Get {
-            return error_response(&req.version, StatusCode::MethodNotAllowed);
+            return error_response_with_pages(
+                &req.version,
+                StatusCode::MethodNotAllowed,
+                &data.error_pages,
+            );
         }
 
         let root = Path::new(&cfg.root);
 
         if root.is_file() {
             if req.path != cfg.mount_path {
-                return error_response(&req.version, StatusCode::NotFound);
+                return error_response_with_pages(
+                    &req.version,
+                    StatusCode::NotFound,
+                    &data.error_pages,
+                );
             }
             return match fs::read(root) {
                 Ok(bytes) => response_with_body(
@@ -142,20 +179,36 @@ pub fn file_server_factory(
                     content_type_for_path(root),
                     bytes,
                 ),
-                Err(_) => error_response(&req.version, StatusCode::NotFound),
+                Err(_) => error_response_with_pages(
+                    &req.version,
+                    StatusCode::NotFound,
+                    &data.error_pages,
+                ),
             };
         }
 
         let Some(rel_path) = route_relative_subpath(&cfg.mount_path, &req.path)
         else {
-            return error_response(&req.version, StatusCode::NotFound);
+            return error_response_with_pages(
+                &req.version,
+                StatusCode::NotFound,
+                &data.error_pages,
+            );
         };
         let Some(target) = safe_join_under_root(root, rel_path) else {
-            return error_response(&req.version, StatusCode::Forbidden);
+            return error_response_with_pages(
+                &req.version,
+                StatusCode::Forbidden,
+                &data.error_pages,
+            );
         };
 
         if !target.is_file() {
-            return error_response(&req.version, StatusCode::NotFound);
+            return error_response_with_pages(
+                &req.version,
+                StatusCode::NotFound,
+                &data.error_pages,
+            );
         }
 
         match fs::read(&target) {
@@ -165,7 +218,11 @@ pub fn file_server_factory(
                 content_type_for_path(&target),
                 bytes,
             ),
-            Err(_) => error_response(&req.version, StatusCode::NotFound),
+            Err(_) => error_response_with_pages(
+                &req.version,
+                StatusCode::NotFound,
+                &data.error_pages,
+            ),
         }
     }
 }

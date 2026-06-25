@@ -5,7 +5,7 @@ use std::time::Instant;
 use libc::{EPOLLERR, EPOLLHUP, EPOLLIN, EPOLLOUT, EPOLLRDHUP};
 
 use crate::conn::ConnState;
-use crate::handlers::error_response;
+use crate::handlers::{error_response, errors::error_response_with_pages};
 use crate::utils::helpers::{
     accept_nonblocking, close_fd, epoll_add, epoll_del, epoll_mod,
     epoll_wait_blocking, recv_nonblocking, send_nonblocking, should_drop,
@@ -144,6 +144,24 @@ impl Router {
         close_fd(fd);
     }
 
+    fn error_response_for_raw_request(
+        &self,
+        local_port: u16,
+        header_bytes: &[u8],
+        version: &str,
+        status: crate::https::StatusCode,
+    ) -> crate::https::Response {
+        let host = super::request_parsing::parse_host_header(header_bytes);
+
+        let Some(server) =
+            self.select_server_by_host(local_port, host.as_deref())
+        else {
+            return error_response(version, status);
+        };
+
+        error_response_with_pages(version, status, &server.error_pages)
+    }
+
     fn handle_client_readable(&mut self, fd: RawFd) -> io::Result<()> {
         let mut buf = [0u8; 4096];
 
@@ -211,13 +229,44 @@ impl Router {
                                 Ok(req) => self.handle(parts.local_port, &req),
                                 Err((status, reason)) => {
                                     eprintln!("request rejected: {reason}");
-                                    error_response("HTTP/1.1", status)
+                                    self.error_response_for_raw_request(
+                                        parts.local_port,
+                                        &parts.header_bytes,
+                                        "HTTP/1.1",
+                                        status,
+                                    )
                                 }
                             }
                         }
                         ReadOutcome::Error { status, reason } => {
                             eprintln!("request rejected: {reason}");
-                            error_response("HTTP/1.1", status)
+
+                            let header_bytes = self
+                                .conns
+                                .get(&fd)
+                                .and_then(|conn| {
+                                    conn.in_buf
+                                        .windows(4)
+                                        .position(|w| w == b"\r\n\r\n")
+                                        .map(|header_end| {
+                                            conn.in_buf[..header_end + 4]
+                                                .to_vec()
+                                        })
+                                })
+                                .unwrap_or_default();
+
+                            let local_port = self
+                                .conns
+                                .get(&fd)
+                                .map(|conn| conn.local_port)
+                                .unwrap_or(0);
+
+                            self.error_response_for_raw_request(
+                                local_port,
+                                &header_bytes,
+                                "HTTP/1.1",
+                                status,
+                            )
                         }
                     };
 

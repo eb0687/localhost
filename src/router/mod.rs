@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use libc::{EPOLLIN, epoll_event};
 
 use crate::conn::Conn;
-use crate::handlers::error_response;
+use crate::handlers::{error_response, errors::error_response_with_pages};
 use crate::https::{HttpMethod, Request, Response, StatusCode};
 use crate::info;
 use crate::utils::helpers::create_epoll;
@@ -33,6 +33,7 @@ pub struct Data {
     pub session_id: Option<String>,
     pub is_new_session: bool,
     pub body: Vec<u8>,
+    pub error_pages: HashMap<u16, String>,
 }
 
 pub struct Route {
@@ -205,18 +206,33 @@ impl Router {
 
         let (found, matched_path_but_wrong_method) = match_result;
         let Some((handler, path_value)) = found else {
+            let Some(server) = self.select_server(local_port, req) else {
+                return error_response(&req.version, StatusCode::NotFound);
+            };
+
             if matched_path_but_wrong_method {
-                return error_response(
+                return error_response_with_pages(
                     &req.version,
                     StatusCode::MethodNotAllowed,
+                    &server.error_pages,
                 );
             }
-            return error_response(&req.version, StatusCode::NotFound);
+
+            return error_response_with_pages(
+                &req.version,
+                StatusCode::NotFound,
+                &server.error_pages,
+            );
         };
 
         let now = Instant::now();
         let (session_id, is_new_session) =
             session::resolve_session(&mut self.sessions, req, now);
+
+        let server_error_pages = self
+            .select_server(local_port, req)
+            .map(|server| server.error_pages.clone())
+            .unwrap_or_default();
 
         let data = Data {
             path_value,
@@ -224,6 +240,7 @@ impl Router {
             session_id: session_id.clone(),
             is_new_session,
             body: req.data.body.clone(),
+            error_pages: server_error_pages,
         };
 
         let mut resp = handler(req, &data);

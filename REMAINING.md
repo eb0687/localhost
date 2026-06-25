@@ -1,10 +1,10 @@
-1. Body Size Limits
+1. Body Size Limits (DONE)
 
 - Use client_max_body_size.
 - Reject oversized Content-Length and chunked bodies.
 - Add 413 Payload Too Large.
 
-2. Custom Error Pages
+2. Custom Error Pages (DONE)
 
 - Use each selected virtual server’s error_pages.
 - Serve configured pages for 400, 403, 404, 405, 413, 500.

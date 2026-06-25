@@ -95,6 +95,7 @@ pub(super) fn parse_request(
             query_value: HashMap::new(),
             session_id: None,
             is_new_session: false,
+            error_pages: HashMap::new(),
         },
     })
 }
