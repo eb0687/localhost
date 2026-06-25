@@ -10,19 +10,19 @@
 - Serve configured pages for 400, 403, 404, 405, 413, 500.
 - Keep fallback default generated HTML pages.
 
-3. HTTP Method Behavior
+3. HTTP Method Behavior (DONE)
 
 - Make configured allowed_methods work cleanly.
 - Add correct Allow header for 405.
 - Fix file handlers that still internally assume only GET.
 
-4. Uploads
+4. Uploads (DONE)
 
 - Implement POST upload handling.
 - Save request body to configured upload location.
 - Verify downloaded file is not corrupted.
 
-5. DELETE
+5. DELETE (DONE)
 
 - Implement DELETE for configured file routes.
 - Return correct status codes: 204, 403, 404, 405, etc.
