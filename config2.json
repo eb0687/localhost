@@ -1,23 +1,31 @@
 {
   "schema": "./schema.json",
-  ":8080/readme": {
-    "type": "file_server",
-    "root": "./README.md",
-    "size_limit": 1024,
-    "error_pages": {
-      "404": "404.html",
-      "500": "500.html"
-    },
-    "directory_listing": false
-  },
-  ":8080/directory": {
-    "type": "file_server",
-    "root": "./",
-    "size_limit": 1024,
-    "error_pages": {
-      "404": "404.html",
-      "500": "500.html"
-    },
-    "directory_listing": true
-  }
+  "servers": [
+    {
+      "host": "0.0.0.0",
+      "ports": [8080],
+      "server_name": ["localhost"],
+      "client_max_body_size": 1048576,
+      "error_pages": {
+        "404": "./errors/404.html",
+        "500": "./errors/500.html"
+      },
+      "routes": [
+        {
+          "type": "file_server",
+          "path": "/readme",
+          "root": "./README.md",
+          "allowed_methods": ["Get"]
+        },
+        {
+          "type": "file_server",
+          "path": "/directory",
+          "root": "./",
+          "allowed_methods": ["Get"],
+          "directory_listing": true,
+          "default_file": "index.html"
+        }
+      ]
+    }
+  ]
 }

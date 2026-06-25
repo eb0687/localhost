@@ -1,8 +1,13 @@
+use std::collections::HashMap;
 use std::path;
+use std::sync::Arc;
 
-use crate::config::{AppConfig, model::RouteRule, parse::parse_route_key};
+use crate::config::{
+    AppConfig,
+    model::{FileServerConfig, RouteRule},
+};
 use crate::https;
-use crate::router::Router;
+use crate::router::{Route, Router, VirtualServer};
 
 use super::cgi::cgi_factory;
 use super::files::{dir_server_factory, file_server_factory};
@@ -12,75 +17,128 @@ pub fn register_routes(
     app_config: &AppConfig,
     router: &mut Router,
 ) -> Result<(), String> {
-    for (path_key, route) in &app_config.config.routes {
-        let route_key = parse_route_key(path_key)
-            .map_err(|e| format!("invalid route key '{}': {}", path_key, e))?;
+    for server_config in &app_config.config.servers {
+        let mut virtual_server = VirtualServer {
+            host: server_config.host.clone(),
+            ports: server_config.ports.clone(),
+            server_names: server_config
+                .server_name
+                .iter()
+                .map(|s| s.to_ascii_lowercase())
+                .collect(),
+            client_max_body_size: server_config.client_max_body_size,
+            error_pages: parse_error_pages(server_config.error_pages.clone())?,
+            routes: Vec::new(),
+        };
 
-        let port = route_key.port;
-        let pattern = route_key.path;
-
-        match route {
-            RouteRule::FileServer(file_server_config) => {
-                let methods = file_server_config
-                    .allowed_verbs
-                    .clone()
-                    .unwrap_or_else(|| vec![https::HttpMethod::Get]);
-
-                if methods.is_empty() {
-                    return Err(format!(
-                        "route '{}' has empty allowed_verbs",
-                        pattern
-                    ));
+        for route in &server_config.routes {
+            match route {
+                RouteRule::FileServer(file_server_config) => {
+                    register_file_server_route(
+                        &mut virtual_server,
+                        &file_server_config,
+                    )?;
                 }
-
-                let mut file_server_cfg = file_server_config.clone();
-                file_server_cfg.mount_path = pattern.clone();
-
-                let root_path = path::Path::new(&file_server_cfg.root);
-                if root_path.is_dir() {
-                    let dir_pattern = if pattern == "/" {
-                        "/*rest".to_string()
-                    } else {
-                        format!("{pattern}/*rest")
-                    };
-                    router.add_route(
-                        port,
-                        &dir_pattern,
-                        methods,
-                        dir_server_factory(file_server_cfg),
-                    );
-                } else if root_path.is_file() {
-                    router.add_route(
-                        port,
-                        &pattern,
-                        methods,
-                        file_server_factory(file_server_cfg),
-                    );
-                } else {
-                    return Err(format!(
-                        "route '{}' file_server root '{}' does not exist",
-                        pattern, file_server_cfg.root
-                    ));
+                RouteRule::Cgi(cgi_config) => {
+                    virtual_server.routes.push(Route {
+                        methods: vec![
+                            https::HttpMethod::Get,
+                            https::HttpMethod::Post,
+                        ],
+                        pattern: cgi_config.path.clone(),
+                        handler: Arc::new(cgi_factory(cgi_config.clone())),
+                    });
                 }
-            }
-            RouteRule::Cgi(cgi_config) => {
-                router.add_route(
-                    port,
-                    &pattern,
-                    vec![https::HttpMethod::Get, https::HttpMethod::Post],
-                    cgi_factory(cgi_config.clone()),
-                );
-            }
-            RouteRule::Redirect(redirect_config) => {
-                router.add_route(
-                    port,
-                    &pattern,
-                    vec![https::HttpMethod::Get],
-                    redirect_factory(redirect_config.clone()),
-                );
+                RouteRule::Redirect(redirect_config) => {
+                    virtual_server.routes.push(Route {
+                        methods: vec![https::HttpMethod::Get],
+                        pattern: redirect_config.path.clone(),
+                        handler: Arc::new(redirect_factory(
+                            redirect_config.clone(),
+                        )),
+                    });
+                }
             }
         }
+
+        virtual_server.routes.sort_by(|a, b| {
+            let a_is_catch_all = a.pattern.contains('*');
+            let b_is_catch_all = b.pattern.contains('*');
+
+            a_is_catch_all
+                .cmp(&b_is_catch_all)
+                .then_with(|| b.pattern.len().cmp(&a.pattern.len()))
+        });
+
+        router.add_virtual_server(virtual_server);
     }
 
     Ok(())
+}
+
+fn register_file_server_route(
+    virtual_server: &mut VirtualServer,
+    file_server_config: &FileServerConfig,
+) -> Result<(), String> {
+    let pattern = file_server_config.path.clone();
+
+    let methods = file_server_config
+        .allowed_methods
+        .clone()
+        .unwrap_or_else(|| vec![https::HttpMethod::Get]);
+
+    if methods.is_empty() {
+        return Err(format!("route '{}' has empty allowed_methods", pattern));
+    }
+
+    let mut cfg = file_server_config.clone();
+    cfg.mount_path = pattern.clone();
+
+    let root_path = path::Path::new(&cfg.root);
+    if root_path.is_dir() {
+        let dir_pattern = if pattern == "/" {
+            "/*rest".to_string()
+        } else {
+            format!("{pattern}/*rest")
+        };
+
+        virtual_server.routes.push(Route {
+            methods,
+            pattern: dir_pattern,
+            handler: Arc::new(dir_server_factory(cfg)),
+        });
+    } else if root_path.is_file() {
+        virtual_server.routes.push(Route {
+            methods,
+            pattern: pattern.clone(),
+            handler: Arc::new(file_server_factory(cfg)),
+        });
+    } else {
+        return Err(format!(
+            "route '{}' file_server root '{}' does not exist",
+            pattern, cfg.root
+        ));
+    }
+
+    Ok(())
+}
+
+fn parse_error_pages(
+    raw: Option<HashMap<String, String>>,
+) -> Result<HashMap<u16, String>, String> {
+    let mut parsed = HashMap::new();
+
+    let Some(raw) = raw else {
+        return Ok(parsed);
+    };
+
+    for (code_str, path) in raw {
+        let code = code_str.parse::<u16>().map_err(|_| {
+            format!("error page code '{code_str}' is not a valid status code")
+        })?;
+
+        parsed.insert(code, path);
+    }
+
+    Ok(parsed)
 }

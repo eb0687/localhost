@@ -1,44 +1,48 @@
 {
   "schema": "./schema.json",
-  ":8080": {
-    "type": "file_server",
-    "root": "./website1",
-    "size_limit": 1024,
-    "error_pages": {
-      "404": "404.html",
-      "500": "500.html"
+  "servers": [
+    {
+      "host": "0.0.0.0",
+      "ports": [8080],
+      "server_name": ["localhost", "site1.local"],
+      "client_max_body_size": 1048576,
+      "error_pages": {
+        "404": "./errors/404.html",
+        "500": "./errors/500.html"
+      },
+      "routes": [
+        {
+          "type": "file_server",
+          "path": "/",
+          "root": "./",
+          "allowed_methods": ["Get"],
+          "directory_listing": true,
+          "default_file": "index.html"
+        },
+        {
+          "type": "file_server",
+          "path": "/readme",
+          "root": "./README.md",
+          "allowed_methods": ["Get"]
+        }
+      ]
     },
-    "directory_listing": true
-  },
-
-  "localhost:8081/upload": {
-    "type": "file_server",
-    "root": "./website2/uploads",
-    "size_limit": 1024,
-    "allowed_verbs": ["Post"],
-    "directory_listing": false
-  },
-
-  "0.0.0.0:8081/upload": {
-    "type": "file_server",
-    "root": "./website2/uploads",
-    "size_limit": 1024,
-    "allowed_verbs": ["Post"],
-    "directory_listing": false
-  },
-
-  ":8081/whatever": {
-    "type": "file_server",
-    "root": "./website2/whatever.txt"
-  },
-
-  ":8081/redirect-bash": {
-    "type": "cgi",
-    "root": "./website2/cgi-bin/redirect.sh"
-  },
-
-  ":8082": {
-    "type": "redirect",
-    "target": "http://example.com"
-  }
+    {
+      "host": "0.0.0.0",
+      "ports": [8080],
+      "server_name": ["site2.local"],
+      "client_max_body_size": 1048576,
+      "error_pages": {
+        "404": "./errors/404.html"
+      },
+      "routes": [
+        {
+          "type": "file_server",
+          "path": "/readme",
+          "root": "./README.md",
+          "allowed_methods": ["Get"]
+        }
+      ]
+    }
+  ]
 }
