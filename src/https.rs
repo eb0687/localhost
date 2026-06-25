@@ -5,6 +5,7 @@ use serde::Deserialize;
 use crate::router::Data;
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
 pub enum HttpMethod {
     Get,
     Post,

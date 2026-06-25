@@ -15,13 +15,13 @@
           "type": "file_server",
           "path": "/readme",
           "root": "./README.md",
-          "allowed_methods": ["Get"]
+          "allowed_methods": ["GET"]
         },
         {
           "type": "file_server",
           "path": "/directory",
           "root": "./",
-          "allowed_methods": ["Get"],
+          "allowed_methods": ["GET"],
           "directory_listing": true,
           "default_file": "index.html"
         }

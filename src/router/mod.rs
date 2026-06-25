@@ -182,7 +182,7 @@ impl Router {
                 return error_response(&req.version, StatusCode::NotFound);
             };
 
-            let mut matched_path_but_wrong_method = false;
+            let mut allowed_methods_for_path: Option<Vec<HttpMethod>> = None;
             let mut found: Option<(Handler, HashMap<String, String>)> = None;
 
             for route in &server.routes {
@@ -193,7 +193,7 @@ impl Router {
                 };
 
                 if !route.methods.iter().any(|m| *m == req.method) {
-                    matched_path_but_wrong_method = true;
+                    allowed_methods_for_path = Some(route.methods.clone());
                     continue;
                 }
 
@@ -201,21 +201,28 @@ impl Router {
                 break;
             }
 
-            (found, matched_path_but_wrong_method)
+            (found, allowed_methods_for_path)
         };
 
-        let (found, matched_path_but_wrong_method) = match_result;
+        let (found, allowed_methods_for_path) = match_result;
         let Some((handler, path_value)) = found else {
             let Some(server) = self.select_server(local_port, req) else {
                 return error_response(&req.version, StatusCode::NotFound);
             };
 
-            if matched_path_but_wrong_method {
-                return error_response_with_pages(
+            if let Some(methods) = allowed_methods_for_path {
+                let mut response = error_response_with_pages(
                     &req.version,
                     StatusCode::MethodNotAllowed,
                     &server.error_pages,
                 );
+
+                let allow = allow_header_value(&methods);
+                if !allow.is_empty() {
+                    response.headers.insert("Allow", &allow);
+                }
+
+                return response;
             }
 
             return error_response_with_pages(
@@ -271,6 +278,23 @@ fn normalize_host_header(host: &str) -> String {
     }
 
     host.to_ascii_lowercase()
+}
+
+fn method_name(method: &HttpMethod) -> Option<&'static str> {
+    match method {
+        HttpMethod::Get => Some("GET"),
+        HttpMethod::Post => Some("POST"),
+        HttpMethod::Delete => Some("DELETE"),
+        HttpMethod::Unknown(_) => None,
+    }
+}
+
+fn allow_header_value(methods: &[HttpMethod]) -> String {
+    methods
+        .iter()
+        .filter_map(method_name)
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 #[cfg(test)]
