@@ -7,6 +7,7 @@
       "server_name": ["localhost", "site1.local"],
       "client_max_body_size": 1048576,
       "error_pages": {
+        "403": "./errors/403.html",
         "404": "./errors/404.html",
         "405": "./errors/405.html",
         "413": "./errors/413.html",
@@ -16,9 +17,9 @@
         {
           "type": "file_server",
           "path": "/",
-          "root": "./",
+          "root": "./www",
           "allowed_methods": ["GET"],
-          "directory_listing": true,
+          "directory_listing": false,
           "default_file": "index.html"
         },
         {
@@ -42,6 +43,7 @@
       "server_name": ["site2.local"],
       "client_max_body_size": 1048576,
       "error_pages": {
+        "403": "./errors/403.html",
         "404": "./errors/404.html",
         "405": "./errors/405.html",
         "413": "./errors/413.html",

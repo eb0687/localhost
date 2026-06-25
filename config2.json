@@ -7,6 +7,7 @@
       "server_name": ["localhost"],
       "client_max_body_size": 1048576,
       "error_pages": {
+        "403": "./errors/403.html",
         "404": "./errors/404.html",
         "500": "./errors/500.html"
       },
@@ -20,7 +21,7 @@
         {
           "type": "file_server",
           "path": "/directory",
-          "root": "./",
+          "root": "./www",
           "allowed_methods": ["GET"],
           "directory_listing": true,
           "default_file": "index.html"
