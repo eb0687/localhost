@@ -148,12 +148,12 @@ impl Router {
         self.servers.push(server);
     }
 
-    fn select_server(
+    pub(super) fn select_server_by_host(
         &self,
         local_port: u16,
-        req: &Request,
+        host_header: Option<&str>,
     ) -> Option<&VirtualServer> {
-        if let Some(host_header) = req.headers.get("host") {
+        if let Some(host_header) = host_header {
             let host = normalize_host_header(host_header);
 
             if let Some(server_index) =
@@ -165,6 +165,14 @@ impl Router {
 
         let default_index = self.default_server_by_port.get(&local_port)?;
         self.servers.get(*default_index)
+    }
+
+    fn select_server(
+        &self,
+        local_port: u16,
+        req: &Request,
+    ) -> Option<&VirtualServer> {
+        self.select_server_by_host(local_port, req.headers.get("host"))
     }
 
     pub fn handle(&mut self, local_port: u16, req: &Request) -> Response {

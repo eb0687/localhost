@@ -4,11 +4,35 @@ use crate::https::{HttpMethod, Request, StatusCode};
 
 use super::Data;
 
+pub(super) fn parse_host_header(header_bytes: &[u8]) -> Option<String> {
+    let text = std::str::from_utf8(header_bytes).ok()?;
+    let mut lines = text.split("\r\n");
+
+    lines.next()?;
+
+    for line in lines {
+        if line.is_empty() {
+            break;
+        }
+
+        let Some((name, value)) = line.split_once(':') else {
+            continue;
+        };
+
+        if name.eq_ignore_ascii_case("host") {
+            return Some(value.trim().to_string());
+        }
+    }
+
+    None
+}
+
 pub(super) fn parse_request(
     header_bytes: &[u8],
     body: &[u8],
 ) -> Result<Request, (StatusCode, String)> {
-    let bad_request = |reason: &str| (StatusCode::BadRequest, reason.to_string());
+    let bad_request =
+        |reason: &str| (StatusCode::BadRequest, reason.to_string());
     let text = std::str::from_utf8(header_bytes)
         .map_err(|_| bad_request("request headers are not valid UTF-8"))?;
     let mut lines = text.split("\r\n");

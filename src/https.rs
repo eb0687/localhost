@@ -33,7 +33,7 @@ pub enum StatusCode {
     Found,
     NotFound,
     MethodNotAllowed,
-    // PayloadTooLarge,
+    PayloadTooLarge,
     InternalServerError,
     VersionNotSupported,
 }
@@ -51,6 +51,7 @@ impl StatusCode {
             StatusCode::MethodNotAllowed => 405,
             StatusCode::InternalServerError => 500,
             StatusCode::VersionNotSupported => 505,
+            StatusCode::PayloadTooLarge => 413,
         }
     }
 
@@ -66,6 +67,7 @@ impl StatusCode {
             StatusCode::MethodNotAllowed => "Method Not Allowed",
             StatusCode::InternalServerError => "Internal Server Error",
             StatusCode::VersionNotSupported => "HTTP Version Not Supported",
+            StatusCode::PayloadTooLarge => "Payload Too Large",
         }
         .to_string()
     }
