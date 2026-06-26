@@ -40,12 +40,18 @@ pub fn register_routes(
                     )?;
                 }
                 RouteRule::Cgi(cgi_config) => {
+                    let pattern = if cgi_config.path == "/" {
+                        "/*rest".to_string()
+                    } else {
+                        format!("{}/*rest", cgi_config.path)
+                    };
+
                     virtual_server.routes.push(Route {
                         methods: vec![
                             https::HttpMethod::Get,
                             https::HttpMethod::Post,
                         ],
-                        pattern: cgi_config.path.clone(),
+                        pattern,
                         handler: Arc::new(cgi_factory(cgi_config.clone())),
                     });
                 }

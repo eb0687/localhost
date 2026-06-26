@@ -34,6 +34,13 @@
           "root": "./uploads",
           "allowed_methods": ["GET", "POST", "DELETE"],
           "directory_listing": true
+        },
+        {
+          "type": "cgi",
+          "path": "/cgi",
+          "root": "./cgi",
+          "extension": ".sh",
+          "interpreter": "/bin/bash"
         }
       ]
     },

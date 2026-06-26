@@ -70,6 +70,8 @@ pub struct FileServerConfig {
 pub struct CgiConfig {
     pub path: String,
     pub root: String,
+    pub extension: String,
+    pub interpreter: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]

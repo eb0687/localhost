@@ -220,6 +220,22 @@ fn validate_cgi(
             "server {server_index}, route {route_index} (cgi): root is required"
         ));
     }
+
+    if cfg.extension.trim().is_empty() {
+        errors.push(format!(
+            "server {server_index}, route {route_index} (cgi): extension is required"
+        ));
+    } else if !cfg.extension.starts_with('.') {
+        errors.push(format!(
+            "server {server_index}, route {route_index} (cgi): extension must start with '.'"
+        ));
+    }
+
+    if cfg.interpreter.trim().is_empty() {
+        errors.push(format!(
+            "server {server_index}, route {route_index} (cgi): interpreter is required"
+        ));
+    }
 }
 
 fn validate_redirect(
