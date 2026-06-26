@@ -37,6 +37,7 @@ pub enum StatusCode {
     PayloadTooLarge,
     InternalServerError,
     VersionNotSupported,
+    GatewayTimeout,
 }
 
 impl StatusCode {
@@ -53,6 +54,7 @@ impl StatusCode {
             StatusCode::InternalServerError => 500,
             StatusCode::VersionNotSupported => 505,
             StatusCode::PayloadTooLarge => 413,
+            StatusCode::GatewayTimeout => 504,
         }
     }
 
@@ -69,6 +71,7 @@ impl StatusCode {
             StatusCode::InternalServerError => "Internal Server Error",
             StatusCode::VersionNotSupported => "HTTP Version Not Supported",
             StatusCode::PayloadTooLarge => "Payload Too Large",
+            StatusCode::GatewayTimeout => "Gateway Timeout",
         }
         .to_string()
     }

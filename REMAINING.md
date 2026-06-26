@@ -27,7 +27,7 @@
 - Implement DELETE for configured file routes.
 - Return correct status codes: 204, 403, 404, 405, etc.
 
-6. CGI
+6. CGI (DONE)
 
 - Execute one CGI type.
 - Use fork/exec.

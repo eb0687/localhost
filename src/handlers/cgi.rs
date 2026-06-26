@@ -1,12 +1,15 @@
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 
 use crate::config::model::CgiConfig;
 use crate::https::{self, HeaderMap, Response, StatusCode, response_with_body};
 use crate::router;
 
 use super::errors::error_response_with_pages;
+
+const CGI_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub fn cgi_factory(
     cgi_config: CgiConfig,
@@ -80,7 +83,15 @@ fn handle_cgi(
 
     let output = match run_cgi(req, data, cfg, &script_path, rel_script_path) {
         Ok(output) => output,
-        Err(_) => {
+        Err(CgiRunError::Timeout) => {
+            return error_response_with_pages(
+                &req.version,
+                StatusCode::GatewayTimeout,
+                &data.error_pages,
+            );
+        }
+        Err(CgiRunError::Failure(reason)) => {
+            eprintln!("CGI error: {reason}");
             return error_response_with_pages(
                 &req.version,
                 StatusCode::InternalServerError,
@@ -92,18 +103,26 @@ fn handle_cgi(
     parse_cgi_output(&req.version, output)
 }
 
+enum CgiRunError {
+    Failure(String),
+    Timeout,
+}
+
 fn run_cgi(
     req: &https::Request,
     data: &router::Data,
     cfg: &CgiConfig,
     script_path: &Path,
     path_info: &str,
-) -> Result<Vec<u8>, String> {
-    let script_path = script_path
-        .canonicalize()
-        .map_err(|e| format!("failed to canonicalize CGI script path: {e}"))?;
+) -> Result<Vec<u8>, CgiRunError> {
+    let script_path = script_path.canonicalize().map_err(|e| {
+        CgiRunError::Failure(format!(
+            "failed to canonicalize CGI script path: {e}"
+        ))
+    })?;
+
     let mut child = Command::new(&cfg.interpreter)
-        .arg(script_path)
+        .arg(&script_path)
         .current_dir(Path::new(&cfg.root))
         .env("REQUEST_METHOD", method_name(&req.method))
         .env("PATH_INFO", format!("/{path_info}"))
@@ -119,27 +138,63 @@ fn run_cgi(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|e| format!("failed to spawn CGI: {e}"))?;
+        .map_err(|e| {
+            CgiRunError::Failure(format!("failed to spawn CGI: {e}"))
+        })?;
 
     if let Some(mut stdin) = child.stdin.take() {
-        stdin
-            .write_all(&data.body)
-            .map_err(|e| format!("failed to write CGI stdin: {e}"))?;
+        stdin.write_all(&data.body).map_err(|e| {
+            CgiRunError::Failure(format!("failed to write CGI stdin: {e}"))
+        })?;
     }
 
-    let output = child
-        .wait_with_output()
-        .map_err(|e| format!("failed to read CGI output: {e}"))?;
+    let started = Instant::now();
 
-    if !output.status.success() {
-        return Err(format!(
-            "CGI exited with status {:?}: {}",
-            output.status.code(),
-            String::from_utf8_lossy(&output.stderr)
-        ));
+    loop {
+        match child.try_wait().map_err(|e| {
+            CgiRunError::Failure(format!("failed to poll CGI: {e}"))
+        })? {
+            Some(status) => {
+                let mut stdout = Vec::new();
+                let mut stderr = Vec::new();
+
+                if let Some(mut out) = child.stdout.take() {
+                    out.read_to_end(&mut stdout).map_err(|e| {
+                        CgiRunError::Failure(format!(
+                            "failed to read CGI stdout: {e}"
+                        ))
+                    })?;
+                }
+
+                if let Some(mut err) = child.stderr.take() {
+                    err.read_to_end(&mut stderr).map_err(|e| {
+                        CgiRunError::Failure(format!(
+                            "failed to read CGI stderr: {e}"
+                        ))
+                    })?;
+                }
+
+                if !status.success() {
+                    return Err(CgiRunError::Failure(format!(
+                        "CGI exited with status {:?}: {}",
+                        status.code(),
+                        String::from_utf8_lossy(&stderr)
+                    )));
+                }
+
+                return Ok(stdout);
+            }
+            None => {
+                if started.elapsed() >= CGI_TIMEOUT {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(CgiRunError::Timeout);
+                }
+
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        }
     }
-
-    Ok(output.stdout)
 }
 
 fn parse_cgi_output(version: &str, output: Vec<u8>) -> Response {

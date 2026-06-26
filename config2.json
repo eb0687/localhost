@@ -9,7 +9,8 @@
       "error_pages": {
         "403": "./errors/403.html",
         "404": "./errors/404.html",
-        "500": "./errors/500.html"
+        "500": "./errors/500.html",
+        "504": "./errors/504.html"
       },
       "routes": [
         {

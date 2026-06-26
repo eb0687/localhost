@@ -11,7 +11,8 @@
         "404": "./errors/404.html",
         "405": "./errors/405.html",
         "413": "./errors/413.html",
-        "500": "./errors/500.html"
+        "500": "./errors/500.html",
+        "504": "./errors/504.html"
       },
       "routes": [
         {
@@ -54,7 +55,8 @@
         "404": "./errors/404.html",
         "405": "./errors/405.html",
         "413": "./errors/413.html",
-        "500": "./errors/500.html"
+        "500": "./errors/500.html",
+        "504": "./errors/504.html"
       },
       "routes": [
         {
