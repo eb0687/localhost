@@ -27,6 +27,7 @@ const SESSION_TTL: Duration = Duration::from_secs(SESSION_TTL_SECS);
 pub type Handler = Arc<dyn Fn(&Request, &Data) -> Response + Send + Sync>;
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct Data {
     pub path_value: HashMap<String, String>,
     pub query_value: HashMap<String, String>,
@@ -43,7 +44,6 @@ pub struct Route {
 }
 
 pub struct VirtualServer {
-    pub host: String,
     pub ports: Vec<u16>,
     pub server_names: Vec<String>,
     pub client_max_body_size: Option<usize>,
@@ -65,8 +65,6 @@ pub struct Router {
 
 #[derive(Debug)]
 pub struct Session {
-    pub id: String,
-    pub created_at: Instant,
     pub last_seen: Instant,
     pub visits: u64,
 }

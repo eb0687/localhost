@@ -19,7 +19,6 @@ pub fn register_routes(
 ) -> Result<(), String> {
     for server_config in &app_config.config.servers {
         let mut virtual_server = VirtualServer {
-            host: server_config.host.clone(),
             ports: server_config.ports.clone(),
             server_names: server_config
                 .server_name

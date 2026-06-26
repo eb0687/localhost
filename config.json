@@ -1,5 +1,4 @@
 {
-  "schema": "./schema.json",
   "servers": [
     {
       "host": "0.0.0.0",
@@ -7,6 +6,7 @@
       "server_name": ["localhost", "site1.local"],
       "client_max_body_size": 1048576,
       "error_pages": {
+        "400": "./errors/400.html",
         "403": "./errors/403.html",
         "404": "./errors/404.html",
         "405": "./errors/405.html",
@@ -25,8 +25,8 @@
         },
         {
           "type": "file_server",
-          "path": "/readme",
-          "root": "./README.md",
+          "path": "/hello",
+          "root": "./www/hello.txt",
           "allowed_methods": ["GET"]
         },
         {
@@ -51,6 +51,7 @@
       "server_name": ["site2.local"],
       "client_max_body_size": 1048576,
       "error_pages": {
+        "400": "./errors/400.html",
         "403": "./errors/403.html",
         "404": "./errors/404.html",
         "405": "./errors/405.html",

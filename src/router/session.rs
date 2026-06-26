@@ -58,8 +58,6 @@ pub(super) fn resolve_session(
     sessions.insert(
         sid.clone(),
         Session {
-            id: sid.clone(),
-            created_at: now,
             last_seen: now,
             visits: 1,
         },
@@ -68,6 +66,9 @@ pub(super) fn resolve_session(
     (Some(sid), true)
 }
 
-pub(super) fn cleanup_expired_sessions(sessions: &mut HashMap<String, Session>, now: Instant) {
+pub(super) fn cleanup_expired_sessions(
+    sessions: &mut HashMap<String, Session>,
+    now: Instant,
+) {
     sessions.retain(|_, s| now.duration_since(s.last_seen) <= SESSION_TTL);
 }

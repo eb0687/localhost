@@ -8,7 +8,6 @@ use crate::https::HttpMethod;
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
-    pub schema: Option<String>,
     pub servers: Vec<ServerConfig>,
 }
 
