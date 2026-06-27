@@ -7,58 +7,67 @@ use crate::config::model::{
 use crate::utils::helpers::normalize_path;
 
 impl Config {
-    pub fn validate(&self) -> Result<(), String> {
-        let mut errors: Vec<String> = Vec::new();
+    pub fn retain_valid_servers(&mut self) -> Vec<String> {
+        let original_servers = std::mem::take(&mut self.servers);
+        let mut valid_servers = Vec::new();
+        let mut warnings = Vec::new();
+        let mut seen_names: HashMap<(u16, String), usize> = HashMap::new();
 
-        if self.servers.is_empty() {
-            errors.push("config has no servers".to_string());
-        }
+        for (server_index, server) in original_servers.into_iter().enumerate() {
+            let mut errors = validate_server_config(server_index, &server);
 
-        validate_server_names(self, &mut errors);
+            for &port in &server.ports {
+                for name in &server.server_name {
+                    let normalized = name.trim().to_ascii_lowercase();
 
-        for (server_index, server) in self.servers.iter().enumerate() {
-            validate_server(server_index, server, &mut errors);
-        }
+                    if normalized.is_empty() {
+                        continue;
+                    }
 
-        if errors.is_empty() {
-            Ok(())
-        } else {
-            let mut out = String::from("config validation failed:\n");
-            for err in errors {
-                out.push_str(" - ");
-                out.push_str(&err);
-                out.push('\n');
+                    let key = (port, normalized);
+                    if let Some(first_server_index) = seen_names.get(&key) {
+                        errors.push(format!(
+                            "duplicate server_name '{name}' on port {port}; already used by server {first_server_index}"
+                        ));
+                    }
+                }
             }
-            Err(out)
+
+            if errors.is_empty() {
+                for &port in &server.ports {
+                    for name in &server.server_name {
+                        let normalized = name.trim().to_ascii_lowercase();
+
+                        if normalized.is_empty() {
+                            continue;
+                        }
+
+                        seen_names.insert((port, normalized), server_index);
+                    }
+                }
+
+                valid_servers.push(server);
+            } else {
+                for error in errors {
+                    warnings.push(format!(
+                        "skipping server {server_index}: {error}"
+                    ));
+                }
+            }
         }
+
+        self.servers = valid_servers;
+        warnings
     }
 }
 
-fn validate_server_names(config: &Config, errors: &mut Vec<String>) {
-    let mut seen: HashMap<(u16, String), usize> = HashMap::new();
-
-    for (server_index, server) in config.servers.iter().enumerate() {
-        for &port in &server.ports {
-            for name in &server.server_name {
-                let normalized = name.trim().to_ascii_lowercase();
-
-                if normalized.is_empty() {
-                    errors.push(format!(
-                        "server {server_index}: server_name cannot contain empty names"
-                    ));
-                    continue;
-                }
-
-                let key = (port, normalized);
-                if let Some(first_server_index) = seen.insert(key, server_index)
-                {
-                    errors.push(format!(
-                        "server {server_index}: duplicate server_name '{name}' on port {port}; already used by server {first_server_index}"
-                    ));
-                }
-            }
-        }
-    }
+fn validate_server_config(
+    server_index: usize,
+    server: &ServerConfig,
+) -> Vec<String> {
+    let mut errors = Vec::new();
+    validate_server(server_index, server, &mut errors);
+    errors
 }
 
 fn validate_server(

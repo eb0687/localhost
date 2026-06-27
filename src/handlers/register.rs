@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use crate::config::{
     AppConfig,
-    model::{FileServerConfig, RouteRule},
+    model::{FileServerConfig, RouteRule, ServerConfig},
 };
 use crate::https;
 use crate::router::{Route, Router, VirtualServer};
@@ -17,68 +17,90 @@ pub fn register_routes(
     app_config: &AppConfig,
     router: &mut Router,
 ) -> Result<(), String> {
-    for server_config in &app_config.config.servers {
-        let mut virtual_server = VirtualServer {
-            ports: server_config.ports.clone(),
-            server_names: server_config
-                .server_name
-                .iter()
-                .map(|s| s.to_ascii_lowercase())
-                .collect(),
-            client_max_body_size: server_config.client_max_body_size,
-            error_pages: parse_error_pages(server_config.error_pages.clone())?,
-            routes: Vec::new(),
-        };
+    let mut registered = 0;
 
-        for route in &server_config.routes {
-            match route {
-                RouteRule::FileServer(file_server_config) => {
-                    register_file_server_route(
-                        &mut virtual_server,
-                        &file_server_config,
-                    )?;
-                }
-                RouteRule::Cgi(cgi_config) => {
-                    let pattern = if cgi_config.path == "/" {
-                        "/*rest".to_string()
-                    } else {
-                        format!("{}/*rest", cgi_config.path)
-                    };
-
-                    virtual_server.routes.push(Route {
-                        methods: vec![
-                            https::HttpMethod::Get,
-                            https::HttpMethod::Post,
-                        ],
-                        pattern,
-                        handler: Arc::new(cgi_factory(cgi_config.clone())),
-                    });
-                }
-                RouteRule::Redirect(redirect_config) => {
-                    virtual_server.routes.push(Route {
-                        methods: vec![https::HttpMethod::Get],
-                        pattern: redirect_config.path.clone(),
-                        handler: Arc::new(redirect_factory(
-                            redirect_config.clone(),
-                        )),
-                    });
-                }
+    for (server_index, server_config) in
+        app_config.config.servers.iter().enumerate()
+    {
+        match build_virtual_server(server_config) {
+            Ok(virtual_server) => {
+                router.add_virtual_server(virtual_server);
+                registered += 1;
+            }
+            Err(err) => {
+                eprintln!("skipping server {server_index}: {err}");
             }
         }
+    }
 
-        virtual_server.routes.sort_by(|a, b| {
-            let a_is_catch_all = a.pattern.contains('*');
-            let b_is_catch_all = b.pattern.contains('*');
-
-            a_is_catch_all
-                .cmp(&b_is_catch_all)
-                .then_with(|| b.pattern.len().cmp(&a.pattern.len()))
-        });
-
-        router.add_virtual_server(virtual_server);
+    if registered == 0 {
+        return Err("no valid virtual servers registered".to_string());
     }
 
     Ok(())
+}
+
+fn build_virtual_server(
+    server_config: &ServerConfig,
+) -> Result<VirtualServer, String> {
+    let mut virtual_server = VirtualServer {
+        ports: server_config.ports.clone(),
+        server_names: server_config
+            .server_name
+            .iter()
+            .map(|s| s.to_ascii_lowercase())
+            .collect(),
+        client_max_body_size: server_config.client_max_body_size,
+        error_pages: parse_error_pages(server_config.error_pages.clone())?,
+        routes: Vec::new(),
+    };
+
+    for route in &server_config.routes {
+        match route {
+            RouteRule::FileServer(file_server_config) => {
+                register_file_server_route(
+                    &mut virtual_server,
+                    &file_server_config,
+                )?;
+            }
+            RouteRule::Cgi(cgi_config) => {
+                let pattern = if cgi_config.path == "/" {
+                    "/*rest".to_string()
+                } else {
+                    format!("{}/*rest", cgi_config.path)
+                };
+
+                virtual_server.routes.push(Route {
+                    methods: vec![
+                        https::HttpMethod::Get,
+                        https::HttpMethod::Post,
+                    ],
+                    pattern,
+                    handler: Arc::new(cgi_factory(cgi_config.clone())),
+                });
+            }
+            RouteRule::Redirect(redirect_config) => {
+                virtual_server.routes.push(Route {
+                    methods: vec![https::HttpMethod::Get],
+                    pattern: redirect_config.path.clone(),
+                    handler: Arc::new(redirect_factory(
+                        redirect_config.clone(),
+                    )),
+                });
+            }
+        }
+    }
+
+    virtual_server.routes.sort_by(|a, b| {
+        let a_is_catch_all = a.pattern.contains('*');
+        let b_is_catch_all = b.pattern.contains('*');
+
+        a_is_catch_all
+            .cmp(&b_is_catch_all)
+            .then_with(|| b.pattern.len().cmp(&a.pattern.len()))
+    });
+
+    Ok(virtual_server)
 }
 
 fn register_file_server_route(

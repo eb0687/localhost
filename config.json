@@ -115,6 +115,52 @@
           "directory_listing": true
         }
       ]
+    },
+    {
+      "host": "0.0.0.0",
+      "ports": [8080, 8080],
+      "server_name": ["duplicate.local"],
+      "client_max_body_size": 5,
+      "error_pages": {
+        "400": "./errors/400.html",
+        "403": "./errors/403.html",
+        "404": "./errors/404.html",
+        "405": "./errors/405.html",
+        "413": "./errors/413.html",
+        "500": "./errors/500.html",
+        "504": "./errors/504.html"
+      },
+      "routes": [
+        {
+          "type": "file_server",
+          "path": "/hello",
+          "root": "./www/hello.txt",
+          "allowed_methods": ["GET"]
+        }
+      ]
+    },
+    {
+      "host": "0.0.0.0",
+      "ports": [8080],
+      "server_name": ["bad.local"],
+      "client_max_body_size": 5,
+      "error_pages": {
+        "400": "./errors/400.html",
+        "403": "./errors/403.html",
+        "404": "./errors/404.html",
+        "405": "./errors/405.html",
+        "413": "./errors/413.html",
+        "500": "./errors/500.html",
+        "504": "./errors/504.html"
+      },
+      "routes": [
+        {
+          "type": "file_server",
+          "path": "/bad",
+          "root": "./missing-folder",
+          "allowed_methods": ["GET"]
+        }
+      ]
     }
   ]
 }
