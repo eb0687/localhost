@@ -142,7 +142,20 @@ fn handle_get_dir(
 
     items.sort();
 
-    let mut body = String::from("<html><body><h1>Directory listing</h1><ul>");
+    // let mut body = String::from("<html><body><h1>Directory listing</h1><ul>");
+    let mut body = String::from(
+        r#"<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Directory listing</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Directory listing</h1>
+      <ul>"#,
+    );
     let base = if req.path.ends_with('/') {
         req.path.clone()
     } else {
@@ -158,7 +171,8 @@ fn handle_get_dir(
         body.push_str("</a></li>");
     }
 
-    body.push_str("</ul></body></html>");
+    // body.push_str("</ul></body></html>");
+    body.push_str("</ul></main></body></html>");
 
     response_with_body(
         &req.version,

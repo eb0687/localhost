@@ -1,0 +1,17 @@
+body {
+  min-height: 100vh;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  font-family: system-ui, sans-serif;
+  background: black;
+  color: white;
+}
+
+main {
+  max-width: 640px;
+  padding: 2rem;
+  text-align: center;
+  background: black;
+  color: white;
+}

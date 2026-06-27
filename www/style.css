@@ -1,0 +1,20 @@
+body {
+  min-height: 100vh;
+  place-items: center;
+  font-family: system-ui, sans-serif;
+  background: black;
+  color: white;
+}
+
+main {
+  max-width: 640px;
+  background: black;
+  color: white;
+}
+
+.logo {
+  display: block;
+  width: 160px;
+  max-width: 70%;
+  height: auto;
+}
