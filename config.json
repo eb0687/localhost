@@ -3,7 +3,7 @@
     {
       "host": "0.0.0.0",
       "ports": [8080],
-      "server_name": ["localhost", "site1.local"],
+      "server_name": ["localhost", "site1.local", "test.com"],
       "client_max_body_size": 1048576,
       "error_pages": {
         "400": "./errors/400.html",
@@ -31,6 +31,13 @@
         },
         {
           "type": "file_server",
+          "path": "/errors",
+          "root": "./errors",
+          "allowed_methods": ["GET"],
+          "directory_listing": false
+        },
+        {
+          "type": "file_server",
           "path": "/upload",
           "root": "./uploads",
           "allowed_methods": ["GET", "POST", "DELETE"],
@@ -42,12 +49,23 @@
           "root": "./cgi",
           "extension": ".sh",
           "interpreter": "/bin/bash"
+        },
+        {
+          "type": "redirect",
+          "path": "/redirect",
+          "target": "http://localhost:8080/redirected"
+        },
+        {
+          "type": "file_server",
+          "path": "/redirected",
+          "root": "./www/redirected.html",
+          "allowed_methods": ["GET"]
         }
       ]
     },
     {
       "host": "0.0.0.0",
-      "ports": [8080],
+      "ports": [8080, 8021],
       "server_name": ["site2.local"],
       "client_max_body_size": 1048576,
       "error_pages": {
@@ -62,9 +80,39 @@
       "routes": [
         {
           "type": "file_server",
-          "path": "/readme",
-          "root": "./README.md",
+          "path": "/hello",
+          "root": "./www/hello.txt",
           "allowed_methods": ["GET"]
+        }
+      ]
+    },
+    {
+      "host": "0.0.0.0",
+      "ports": [8080],
+      "server_name": ["small.local"],
+      "client_max_body_size": 5,
+      "error_pages": {
+        "400": "./errors/400.html",
+        "403": "./errors/403.html",
+        "404": "./errors/404.html",
+        "405": "./errors/405.html",
+        "413": "./errors/413.html",
+        "500": "./errors/500.html",
+        "504": "./errors/504.html"
+      },
+      "routes": [
+        {
+          "type": "file_server",
+          "path": "/hello",
+          "root": "./www/hello.txt",
+          "allowed_methods": ["GET"]
+        },
+        {
+          "type": "file_server",
+          "path": "/upload",
+          "root": "./uploads",
+          "allowed_methods": ["GET", "POST", "DELETE"],
+          "directory_listing": true
         }
       ]
     }
