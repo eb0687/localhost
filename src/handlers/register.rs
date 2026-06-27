@@ -24,9 +24,25 @@ pub fn register_routes(
     {
         match build_virtual_server(server_config) {
             Ok(virtual_server) => {
+                println!(
+                    "registered server {server_index}: names={} ports={} routes={}",
+                    virtual_server.server_names.join(","),
+                    virtual_server
+                        .ports
+                        .iter()
+                        .map(u16::to_string)
+                        .collect::<Vec<_>>()
+                        .join(","),
+                    virtual_server.routes.len()
+                );
+
                 router.add_virtual_server(virtual_server);
                 registered += 1;
             }
+            // Ok(virtual_server) => {
+            //     router.add_virtual_server(virtual_server);
+            //     registered += 1;
+            // }
             Err(err) => {
                 eprintln!("skipping server {server_index}: {err}");
             }
